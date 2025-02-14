@@ -1,3 +1,7 @@
+"""This script calculates cropland areas and SOC weights for CONUS counties.
+The cropland map is based on the LGRIP30 L3 version 2 dataset, and the soil parameters are from the SoilGrids250m
+version 2.0 dataset.
+"""
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,16 +16,16 @@ from settings import COUNTY_SHP
 from settings import LU_MAP, LU_TYPES, AG_TYPES
 from settings import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
 
-CONUS_CENTRAL_LON = -98.583
-DI = DJ = 0.00026949
-LAT0 = 24.0
+CONUS_CENTRAL_LON = -98.583 # central longitude of the CONUS (degree)
+DI = DJ = 0.00026949    # LGRI30 grid size (degree)
+LAT0 = 24.0             # reference latitude (degree)
 IND_J = lambda lat: int(round((lat - LAT0) / DJ))
 FUNCS = {
     'mean': lambda x: x.mean(),
     'max': lambda x: x.max(),
     'min': lambda x: x.min(),
 }
-MIN_REPORT_AREA = 10.0 # ha
+MIN_REPORT_AREA = 10.0  # minimum area to report (ha)
 
 
 def get_lgrip_grid(x, y):
@@ -129,19 +133,19 @@ def main():
     usa_gdf.set_index('GID_2', inplace=True)
     usa_gdf['GID'] = usa_gdf.index
 
-    # Generate a CONUS GeoDataFrame by remoing Alaska and Hawaii
+    # Generate a CONUS GeoDataFrame by removing Alaska and Hawaii
     conus_gdf = usa_gdf.drop(usa_gdf[(usa_gdf['NAME_1'] == 'Alaska') | (usa_gdf['NAME_1'] == 'Hawaii')].index)
 
     # Read cropland map
     conus_lu = rioxarray.open_rasterio(LU_MAP, masked=True)
 
-
+    # Calculate the areas of each LGRIP30 grid
     area_gdf = calculate_grid_areas(conus_lu.coords['y'], 'epsg:4326')
-
 
     # Create an empty csv to store results
     with open(AREA_SOC_CSV, 'w') as f: pass
 
+    # Find SoilGrids layers that are shallower than the total depth
     layers = [layer for layer in SOILGRIDS_LAYERS if layer['bottom'] <= TOTAL_DEPTH]
 
     # Generate a list of all variables that need to be calculated
@@ -151,6 +155,7 @@ def main():
             for v in FUNCS:
                 variables.append(f'soc_{t}_{v}_{d}')
 
+    # Calculate cropland areas and SOC weights
     conus_gdf[variables] = conus_gdf.apply(
         lambda x: calculate_cropland_soc(
             conus_lu, area_gdf, x['geometry'],
@@ -161,8 +166,10 @@ def main():
         result_type='expand',
     )
 
+    # Remove counties with no cropland
     conus_gdf = conus_gdf[conus_gdf['rainfed_area'] + conus_gdf['irrigated_area'] > 0.0]
 
+    # Save the results to a csv file
     with open(AREA_SOC_CSV, 'a') as f:
         f.write('# CONUS county cropland areas and SOC weight at top 30-cm soil depth\n')
         f.write('#\n')
