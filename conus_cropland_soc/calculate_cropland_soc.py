@@ -15,6 +15,7 @@ from settings import TOTAL_DEPTH, AREA_SOC_CSV
 from settings import COUNTY_SHP
 from settings import LU_MAP, LU_TYPES, AG_TYPES
 from settings import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
+from settings import WGS84
 
 CONUS_CENTRAL_LON = -98.583 # central longitude of the CONUS (degree)
 DI = DJ = 0.00026949    # LGRI30 grid size (degree)
@@ -58,7 +59,7 @@ def plot_cropland_area(county_lu, county_boundary, gid, county, state, state_abb
     ]
     cmap = ListedColormap(colors)
 
-    gdf = gpd.GeoDataFrame({'id': [1], 'geometry': [county_boundary]}, crs='epsg:4326')
+    gdf = gpd.GeoDataFrame({'id': [1], 'geometry': [county_boundary]}, crs=WGS84)
 
     try:
         fig, ax = plt.subplots()
@@ -96,7 +97,7 @@ def calculate_cropland_soc(lu_xds, area_gdf, boundary, gid, county, state, state
 
     for v in ['bulk_density', 'soc']:
         for layer in layers:
-            soil_xds = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/USA.{gid.split(".")[1]}_1/{SOILGRIDS_PARAMETERS[v]["variable"]}_{layer["name"]}.tif', masked=True).rio.reproject('EPSG:4326')
+            soil_xds = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/USA.{gid.split(".")[1]}_1/{SOILGRIDS_PARAMETERS[v]["variable"]}_{layer["name"]}.tif', masked=True).rio.reproject(WGS84)
             _soil = soil_xds.rio.reproject_match(county_lu, resampling=Resampling.nearest)
             _soil = _soil.rio.clip([boundary], from_disk=True)
 
@@ -140,7 +141,7 @@ def main():
     conus_lu = rioxarray.open_rasterio(LU_MAP, masked=True)
 
     # Calculate the areas of each LGRIP30 grid
-    area_gdf = calculate_grid_areas(conus_lu.coords['y'], 'epsg:4326')
+    area_gdf = calculate_grid_areas(conus_lu.coords['y'], WGS84)
 
     # Create an empty csv to store results
     with open(AREA_SOC_CSV, 'w') as f: pass
