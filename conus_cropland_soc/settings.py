@@ -64,3 +64,9 @@ CURVE_NUMBERS = {
     'C': 85,
     'D': 89,
 }
+
+# coordinate reference systems
+WGS84 = 'epsg:4326'     # WGS84
+AEAC = 'esri:102003'    # Albers Equal Area projection
+NAD83 = 'epsg:5070'     # NAD83 / Conus Albers, CRS of gSSURGO
+HOMOLOSINE = 'urn:ogc:def:crs:EPSG::152160' # Interrupted Goode Homolosine, CRS of SoilGrids

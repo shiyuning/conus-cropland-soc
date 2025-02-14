@@ -6,6 +6,7 @@ from owslib.wcs import WebCoverageService
 from shapely.geometry import Point
 from settings import STATE_SHP
 from settings import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
+from settings import WGS84, HOMOLOSINE
 
 
 """Convert bounding boxes in WGS84 to SoilGrids CRS
@@ -36,7 +37,7 @@ def _get_data(gid, var, depth, bbox, buffer, crs):
         try:
             response = wcs.getCoverage(
                 identifier=f'{var}_{depth}_mean',
-                crs='urn:ogc:def:crs:EPSG::152160',
+                crs=HOMOLOSINE,
                 bbox=bbox,
                 resx=250, resy=250,
                 format='GEOTIFF_INT16')
@@ -58,7 +59,7 @@ def get_soilgrids_data(gid, boundary):
     buffer = [min(2.0, 0.5 * (bbox[2] - bbox[0])), min(2.0, 0.5 * (bbox[3] - bbox[1]))]
     for v in SOILGRIDS_PARAMETERS:
         for layer in SOILGRIDS_LAYERS:
-            _get_data(gid, SOILGRIDS_PARAMETERS[v]['variable'], layer['name'], bbox, buffer, 'epsg:4326')
+            _get_data(gid, SOILGRIDS_PARAMETERS[v]['variable'], layer['name'], bbox, buffer, WGS84)
 
 
 def main():
