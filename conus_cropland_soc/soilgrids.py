@@ -1,6 +1,9 @@
+import geopandas as gpd
 import pandas as pd
 import rioxarray
 from rasterio.enums import Resampling
+from owslib.wcs import WebCoverageService
+from shapely.geometry import Point
 
 SOILGRIDS_DIRECTORY = f'/storage/home/yzs123/work/data/SoilGrids/'
 SOILGRIDS_PARAMETERS = {
@@ -19,6 +22,7 @@ SOILGRIDS_LAYERS = {
     '100-200cm': {'top': 1.0, 'bottom': 2.0, 'thickness': 1.0},
 }
 HOMOLOSINE = 'urn:ogc:def:crs:EPSG::152160' # Interrupted Goode Homolosine, CRS of SoilGrids
+
 
 # Read state SoilGrids data
 def read_soilgrids_maps(state_id, layers, parameters, crs=HOMOLOSINE):
@@ -43,3 +47,45 @@ def reproject_match_soilgrids_maps(soilgrids_xds, reference_xds, reference_name,
             df = pd.concat([df, soil_df], axis=1)
 
     return df
+
+
+"""Convert bounding boxes to SoilGrids CRS
+"""
+def get_bounding_box(bbox, crs):
+    d = {'col1': ['NW', 'SE'], 'geometry': [Point(bbox[0], bbox[3]), Point(bbox[2], bbox[1])]}
+    gdf = gpd.GeoDataFrame(d, crs=crs).set_index('col1')
+
+    _gdf = gpd.read_file(f'{SOILGRIDS_DIRECTORY}/bdod_index.shp')
+    converted = gdf.to_crs(_gdf.crs)
+
+    return [
+        converted.loc['NW', 'geometry'].xy[0][0],
+        converted.loc['SE', 'geometry'].xy[1][0],
+        converted.loc['SE', 'geometry'].xy[0][0],
+        converted.loc['NW', 'geometry'].xy[1][0],
+    ]
+
+
+"""Use WebCoverageService to get SoilGrids data
+bbox should be in the order of [west, south, east, north]
+"""
+def download_soilgrids_data(layers, parameters, path, bbox, crs):
+    # Convert bounding box to SoilGrids CRS
+    bbox = get_bounding_box(bbox, crs)
+
+    for v in [SOILGRIDS_PARAMETERS[param]['variable'] for param in parameters]:
+        for layer in layers:
+            wcs = WebCoverageService(f'http://maps.isric.org/mapserv?map=/map/{v}.map', version='1.0.0')
+            while True:
+                try:
+                    response = wcs.getCoverage(
+                        identifier=f'{v}_{layer}_mean',
+                        crs=HOMOLOSINE,
+                        bbox=bbox,
+                        resx=250, resy=250,
+                        format='GEOTIFF_INT16')
+
+                    with open(f'{path}/{v}_{layer}.tif', 'wb') as file: file.write(response.read())
+                    break
+                except:
+                    continue
