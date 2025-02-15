@@ -3,19 +3,19 @@ The cropland map is based on the LGRIP30 L3 version 2 dataset, and the soil para
 version 2.0 dataset.
 """
 import geopandas as gpd
-import matplotlib.pyplot as plt
 import numpy as np
 import os
 import pandas as pd
 import rioxarray
 from matplotlib.colors import ListedColormap
-from rasterio.enums import Resampling
 from shapely.geometry import Polygon
-from settings import TOTAL_DEPTH, AREA_SOC_CSV
-from settings import COUNTY_SHP
-from settings import LU_MAP, LU_TYPES, AG_TYPES
-from settings import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
-from settings import WGS84
+from config import TOTAL_DEPTH, AREA_SOC_CSV, MIN_REPORT_AREA
+from config import LU_MAP, LU_TYPES, AG_TYPES
+from config import WGS84
+from usa_gadm import STATE_ABBREVIATIONS
+from usa_gadm import read_usa_gadm
+from soilgrids import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
+from soilgrids import read_soilgrids_maps, reproject_match_soilgrids_maps
 
 CONUS_CENTRAL_LON = -98.583 # central longitude of the CONUS (degree)
 DI = DJ = 0.00026949    # LGRI30 grid size (degree)
@@ -26,7 +26,6 @@ FUNCS = {
     'max': lambda x: x.max(),
     'min': lambda x: x.min(),
 }
-MIN_REPORT_AREA = 10.0  # minimum area to report (ha)
 
 
 def get_lgrip_grid(x, y):
@@ -50,60 +49,21 @@ def calculate_grid_areas(latitudes, crs):
     return area_gdf
 
 
-def plot_cropland_area(county_lu, county_boundary, gid, county, state, state_abbreviation):
-    colors = [
-        'blue',
-        'silver',
-        'lime',
-        'yellow',
-    ]
-    cmap = ListedColormap(colors)
-
-    gdf = gpd.GeoDataFrame({'id': [1], 'geometry': [county_boundary]}, crs=WGS84)
-
-    try:
-        fig, ax = plt.subplots()
-        img = county_lu.plot(ax=ax, vmin=-0.5, vmax=3.5, cmap=cmap)
-        cb = img.colorbar
-        cb.set_ticks([0, 1, 2, 3])
-        cb.set_ticklabels(['water', 'non-croplands', 'irrigated', 'rainfed'])
-
-        gdf.plot(ax=ax, fc='None')
-        ax.set_title(f'{county}, {state}')
-        ax.set_xlabel('Longitude (degree)')
-        ax.set_ylabel('Latitude (degree)')
-        plt.tight_layout()
-        fig.savefig(f'img/{gid}_{county.replace(" ", "")}_{state_abbreviation}.png', dpi=300)
-        plt.close()
-    except: pass
-
-
 def soc_weight(bulk_density, soc_percent, thickness_meter):
     return soc_percent * 0.01 * thickness_meter * bulk_density * 1.0E4
 
 
-def calculate_cropland_soc(lu_xds, area_gdf, boundary, gid, county, state, state_abbreviation, layers, variables):
-    with open(f'./temp/{gid}', 'w') as f: pass
+def calculate_cropland_soc(lu_xds, area_gdf, boundary, county_id, state_id, layers, variables):
+    with open(f'./temp/{county_id}', 'w') as f: pass
 
-    county_lu = lu_xds.rio.clip([boundary], from_disk=True)
+    # Read SoilGrids maps
+    soilgrids_xds = read_soilgrids_maps(state_id, layers, ['bulk_density', 'soc'], WGS84)
 
-    plot_cropland_area(county_lu, boundary, gid, county, state, state_abbreviation)
-
-    df = county_lu[0].to_pandas().stack(dropna=False)
-    df.name = 'lu'
+    # Align SoilGrids maps with cropland map
+    df = reproject_match_soilgrids_maps(soilgrids_xds, lu_xds, 'lu', boundary, layers, ['bulk_density', 'soc'])
 
     # No cropland
     if df[df.isin(AG_TYPES)].empty : return [0.0, 0.0] + list(np.nan * np.ones(len(variables) - 2))
-
-    for v in ['bulk_density', 'soc']:
-        for layer in layers:
-            soil_xds = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/USA.{gid.split(".")[1]}_1/{SOILGRIDS_PARAMETERS[v]["variable"]}_{layer["name"]}.tif', masked=True).rio.reproject(WGS84)
-            _soil = soil_xds.rio.reproject_match(county_lu, resampling=Resampling.nearest)
-            _soil = _soil.rio.clip([boundary], from_disk=True)
-
-            _df = _soil[0].to_pandas().stack(dropna=False) * SOILGRIDS_PARAMETERS[v]['multiplier']
-            _df.name = f'{v}_{layer["name"]}'
-            df = pd.concat([df, _df], axis=1)
 
     # Retrieve the areas of each LGRIP30 grid
     df = df[df['lu'].isin(AG_TYPES)].reset_index()
@@ -111,66 +71,27 @@ def calculate_cropland_soc(lu_xds, area_gdf, boundary, gid, county, state, state
     df = pd.merge(df, area_gdf, on='ind', how='left')
 
     for layer in layers:
-        df[f'soc_weight_{layer["name"]}'] = df.apply(lambda x: soc_weight(x[f'bulk_density_{layer["name"]}'], x[f'soc_{layer["name"]}'], layer['thickness']), axis=1)
+        df[f'soc_weight_{layer}'] = df.apply(lambda x: soc_weight(x[f'bulk_density_{layer}'], x[f'soc_{layer}'], SOILGRIDS_LAYERS[layer]['thickness']), axis=1)
 
-    df[f'soc_weight_0-{int(TOTAL_DEPTH * 100)}cm'] = df[[f'soc_weight_{layer["name"]}' for layer in layers]].sum(axis=1, skipna=False)
+    df[f'soc_weight_0-{int(TOTAL_DEPTH * 100)}cm'] = df[[f'soc_weight_{layer}' for layer in layers]].sum(axis=1, skipna=False)
 
     result = {}
     for t in LU_TYPES:
         area = df[df['lu'].isin(LU_TYPES[t])]['area_ha'].sum()
         result[f'{t}_area'] = area if area > MIN_REPORT_AREA else 0.0
 
-        for layer in [l['name'] for l in layers] + [f'0-{int(TOTAL_DEPTH * 100)}cm']:
-            sub_df = df.loc[df['lu'].isin(LU_TYPES[t]), f'soc_weight_{layer}']
+        for layer in layers + [f'0-{int(TOTAL_DEPTH * 100)}cm']:
+            sub_df = df.loc[df['lu'].isin(LU_TYPES[t]), f'soc_weight_{layer}'].copy()
             for f in FUNCS:
                 result[f'soc_{t}_{f}_{layer}'] = np.nan if sub_df.empty or result[f'{t}_area'] == 0.0 else FUNCS[f](sub_df)
 
     return [result[v] for v in variables]
 
 
-def main():
-    # Read county boundaries from GADM shapefile
-    usa_gdf = gpd.read_file(COUNTY_SHP)
-    usa_gdf.set_index('GID_2', inplace=True)
-    usa_gdf['GID'] = usa_gdf.index
-
-    # Generate a CONUS GeoDataFrame by removing Alaska and Hawaii
-    conus_gdf = usa_gdf.drop(usa_gdf[(usa_gdf['NAME_1'] == 'Alaska') | (usa_gdf['NAME_1'] == 'Hawaii')].index)
-
-    # Read cropland map
-    conus_lu = rioxarray.open_rasterio(LU_MAP, masked=True)
-
-    # Calculate the areas of each LGRIP30 grid
-    area_gdf = calculate_grid_areas(conus_lu.coords['y'], WGS84)
-
-    # Create an empty csv to store results
-    with open(AREA_SOC_CSV, 'w') as f: pass
-
-    # Find SoilGrids layers that are shallower than the total depth
-    layers = [layer for layer in SOILGRIDS_LAYERS if layer['bottom'] <= TOTAL_DEPTH]
-
-    # Generate a list of all variables that need to be calculated
-    variables = [f'{t}_area' for t in LU_TYPES]
-    for d in [layer['name'] for layer in layers] + [f'0-{int(TOTAL_DEPTH * 100)}cm']:
-        for t in LU_TYPES:
-            for v in FUNCS:
-                variables.append(f'soc_{t}_{v}_{d}')
-
-    # Calculate cropland areas and SOC weights
-    conus_gdf[variables] = conus_gdf.apply(
-        lambda x: calculate_cropland_soc(
-            conus_lu, area_gdf, x['geometry'],
-            x['GID'], x['NAME_2'], x['NAME_1'], x['HASC_2'].split('.')[1],
-            layers, variables,
-        ),
-        axis=1,
-        result_type='expand',
-    )
-
-    # Remove counties with no cropland
+def write_to_csv(conus_gdf, variables):
     conus_gdf = conus_gdf[conus_gdf['rainfed_area'] + conus_gdf['irrigated_area'] > 0.0]
 
-    # Save the results to a csv file
+    with open(AREA_SOC_CSV, 'w') as f: pass
     with open(AREA_SOC_CSV, 'a') as f:
         f.write('# CONUS county cropland areas and SOC weight at top 30-cm soil depth\n')
         f.write('#\n')
@@ -189,6 +110,38 @@ def main():
             float_format='%.2f',
         )
 
+
+def main():
+    # Read CONUS counties
+    conus_gdf = read_usa_gadm(2, conus=True)
+
+    # Read cropland map
+    lu_xds = rioxarray.open_rasterio(LU_MAP, masked=True)
+
+    # Calculate the areas of each LGRIP30 grid
+    area_gdf = calculate_grid_areas(lu_xds.coords['y'], WGS84)
+
+
+    # Find SoilGrids layers that are shallower than the total depth
+    layers = [layer for layer in SOILGRIDS_LAYERS if SOILGRIDS_LAYERS[layer]['bottom'] <= TOTAL_DEPTH]
+
+    os.makedirs('temp', exist_ok=True)
+
+    # Generate a list of all variables that need to be calculated
+    variables = [f'{t}_area' for t in LU_TYPES]
+    for layer in layers + [f'0-{int(TOTAL_DEPTH * 100)}cm']:
+        for t in LU_TYPES:
+            for v in FUNCS:
+                variables.append(f'soc_{t}_{v}_{layer}')
+
+    # Calculate cropland areas and SOC weights
+    conus_gdf[variables] = conus_gdf.apply(
+        lambda x: calculate_cropland_soc(lu_xds, area_gdf, x['geometry'], x['GID'], x['GID_1'], layers, variables),
+        axis=1,
+        result_type='expand',
+    )
+
+    write_to_csv(conus_gdf, variables)
 
 if __name__ == '__main__':
     main()
