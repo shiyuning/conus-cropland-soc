@@ -1,16 +1,16 @@
 """Get SoilGrids data for each CONUS state
 """
 import os
-from soilgrids import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
+from soilgrids import SOILGRIDS_DIRECTORY, SOILGRIDS_PROPERTIES, SOILGRIDS_LAYERS
 from soilgrids import download_soilgrids_data
 from config import WGS84
-from usa_gadm import read_usa_gadm
+from gadm import read_gadm
 
 
 """Get SoilGrids data given state boundary
 """
-def get_soilgrids_data(gid, boundary):
-    os.makedirs(f'{SOILGRIDS_DIRECTORY}/{gid}', exist_ok=True)
+def get_soilgrids_data(path, gid, boundary):
+    os.makedirs(f'{path}/{gid}', exist_ok=True)
 
     bbox = boundary.bounds
 
@@ -27,18 +27,20 @@ def get_soilgrids_data(gid, boundary):
 
     download_soilgrids_data(
         [layer for layer in SOILGRIDS_LAYERS],
-        [v for v in SOILGRIDS_PARAMETERS],
-        f'{SOILGRIDS_DIRECTORY}/{gid}',
+        [v for v in SOILGRIDS_PROPERTIES],
+        f'{path}/{gid}',
         bbox,
         WGS84,
     )
 
 
 def main():
-    conus_gdf = read_usa_gadm(1, conus=True)
+    # Read CONUS state maps
+    conus_gdf = read_gadm('USA', 'state', conus=True)
 
     # Get SoilGrids data
-    for index, row in conus_gdf.iterrows(): get_soilgrids_data(row['GID'], row['geometry'])
+    for index, row in conus_gdf.iterrows():
+        get_soilgrids_data(SOILGRIDS_DIRECTORY, row['GID'], row['geometry'])
 
 
 if __name__ == '__main__':

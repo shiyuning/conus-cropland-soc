@@ -1,16 +1,16 @@
 import geopandas as gpd
 import pandas as pd
 import rioxarray
-from rasterio.enums import Resampling
 from owslib.wcs import WebCoverageService
+from rasterio.enums import Resampling
 from shapely.geometry import Point
 
 SOILGRIDS_DIRECTORY = f'/storage/home/yzs123/work/data/SoilGrids/'
-SOILGRIDS_PARAMETERS = {
-    'clay': {'variable': 'clay', 'multiplier': 0.1},    # %
-    'sand': {'variable': 'sand', 'multiplier': 0.1},    # %
-    'soc': {'variable': 'soc', 'multiplier': 0.01},     # %
-    'bulk_density': {'variable': 'bdod', 'multiplier': 0.01},   # Mg/m3
+SOILGRIDS_PROPERTIES = {
+    'clay': {'name': 'clay', 'multiplier': 0.1},    # %
+    'sand': {'name': 'sand', 'multiplier': 0.1},    # %
+    'soc': {'name': 'soc', 'multiplier': 0.01},     # %
+    'bulk_density': {'name': 'bdod', 'multiplier': 0.01},   # Mg/m3
 }
 SOILGRIDS_LAYERS = {
     # units: m
@@ -29,7 +29,7 @@ def read_soilgrids_maps(state_id, layers, parameters, crs=HOMOLOSINE):
     soilgrids_xds = {}
     for layer in layers:
         for v in parameters:
-            soilgrids_xds[v + layer] = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/{state_id}/{SOILGRIDS_PARAMETERS[v]["variable"]}_{layer}.tif', masked=True).rio.reproject(crs)
+            soilgrids_xds[v + layer] = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/{state_id}/{SOILGRIDS_PROPERTIES[v]["name"]}_{layer}.tif', masked=True).rio.reproject(crs)
 
     return soilgrids_xds
 
@@ -43,7 +43,7 @@ def reproject_match_soilgrids_maps(soilgrids_xds, reference_xds, reference_name,
             soil_xds = soilgrids_xds[v + layer].rio.reproject_match(reference_xds, resampling=Resampling.nearest)
             soil_xds = soil_xds.rio.clip([boundary], from_disk=True)
 
-            soil_df = pd.DataFrame(soil_xds[0].to_series().rename(f'{v}_{layer}')) * SOILGRIDS_PARAMETERS[v]['multiplier']
+            soil_df = pd.DataFrame(soil_xds[0].to_series().rename(f'{v}_{layer}')) * SOILGRIDS_PROPERTIES[v]['multiplier']
             df = pd.concat([df, soil_df], axis=1)
 
     return df
@@ -73,7 +73,7 @@ def download_soilgrids_data(layers, parameters, path, bbox, crs):
     # Convert bounding box to SoilGrids CRS
     bbox = get_bounding_box(bbox, crs)
 
-    for v in [SOILGRIDS_PARAMETERS[param]['variable'] for param in parameters]:
+    for v in [SOILGRIDS_PROPERTIES[param]['name'] for param in parameters]:
         for layer in layers:
             wcs = WebCoverageService(f'http://maps.isric.org/mapserv?map=/map/{v}.map', version='1.0.0')
             while True:

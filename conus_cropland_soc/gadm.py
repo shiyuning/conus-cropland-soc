@@ -1,7 +1,13 @@
 import geopandas as gpd
 
-GADM = lambda level: f'/storage/home/yzs123/work/data/gadm/gadm41_USA_{level}.shp'
+GADM = lambda country, level: f'/storage/home/yzs123/work/data/gadm/gadm41_{country}_{level}.shp'
+GADM_LEVELS = {
+    'country': 0,
+    'state': 1,
+    'county': 2,
+}
 
+# For USA
 STATE_ABBREVIATIONS = {
     'USA.1_1': 'AL',
     'USA.2_1': 'AK',
@@ -56,12 +62,13 @@ STATE_ABBREVIATIONS = {
     'USA.51_1': 'WY',
 }
 
-def read_usa_gadm(level, conus=True):
-    gdf = gpd.read_file(GADM(level))
+def read_gadm(country, level, conus=True):
+    level = GADM_LEVELS[level.lower()]
+    gdf = gpd.read_file(GADM(country, level))
     gdf.set_index(f'GID_{level}', inplace=True)
     gdf['GID'] = gdf.index
 
-    if conus:
+    if country == 'USA' and conus:
         # Generate a CONUS GeoDataFrame by removing Alaska and Hawaii
         return gdf[~gdf['NAME_1'].isin(['Alaska', 'Hawaii'])]
     else:

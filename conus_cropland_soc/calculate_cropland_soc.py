@@ -7,14 +7,12 @@ import numpy as np
 import os
 import pandas as pd
 import rioxarray
-from matplotlib.colors import ListedColormap
 from shapely.geometry import Polygon
 from config import TOTAL_DEPTH, AREA_SOC_CSV, MIN_REPORT_AREA
 from config import LU_MAP, LU_TYPES, AG_TYPES
 from config import WGS84
-from usa_gadm import STATE_ABBREVIATIONS
-from usa_gadm import read_usa_gadm
-from soilgrids import SOILGRIDS_DIRECTORY, SOILGRIDS_PARAMETERS, SOILGRIDS_LAYERS
+from gadm import read_gadm
+from soilgrids import SOILGRIDS_LAYERS
 from soilgrids import read_soilgrids_maps, reproject_match_soilgrids_maps
 
 CONUS_CENTRAL_LON = -98.583 # central longitude of the CONUS (degree)
@@ -98,13 +96,11 @@ def write_to_csv(conus_gdf, variables):
         f.write('# DATA SOURCES\n')
         f.write('#  Cropland areas: LGRIP30 L3 version 2\n')
         f.write('#  SOC: SoilGrids250m version 2.0\n')
-        f.write('#\n')
         f.write('# UNITS\n')
         f.write('#  Cropland areas: ha\n')
         f.write('#  Cropland SOC weight: Mg/ha\n')
-        f.write('#\n')
         f.write('# NOTE\n')
-        f.write('# Cropland areas under 10 ha is reported as 0.\n')
+        f.write('#  Cropland areas under 10 ha is reported as 0.\n')
         conus_gdf[['NAME_1', 'NAME_2'] + variables].to_csv(
             f,
             float_format='%.2f',
@@ -113,7 +109,7 @@ def write_to_csv(conus_gdf, variables):
 
 def main():
     # Read CONUS counties
-    conus_gdf = read_usa_gadm(2, conus=True)
+    conus_gdf = read_gadm('USA', 'county', conus=True)
 
     # Read cropland map
     lu_xds = rioxarray.open_rasterio(LU_MAP, masked=True)
