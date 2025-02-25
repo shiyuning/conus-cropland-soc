@@ -65,7 +65,7 @@ def generate_soil_file(fn, source, county, state, irrigation_type, hsg, slope, s
         f.write("%-15s\t%d\n" % ("CURVE_NUMBER", cn))
         f.write("%-15s\t%.2f\n" % ("SLOPE", slope))
 
-        f.write("%-15s\t%d\n" % ("TOTAL_LAYERS", len(soil_df)))
+        f.write("%-15s\t%d\n" % ("TOTAL_LAYERS", len(df)))
         f.write(('%-7s\t'*12 + '%s\n') % (
             "LAYER", "THICK", "CLAY", "SAND", "SOC", "BD", "FC", "PWP", "SON", "NO3", "NH4", "BYP_H", "BYP_V"
         ))
