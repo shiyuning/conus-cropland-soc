@@ -120,6 +120,7 @@ def main():
                 if not selected_soil[selected_soil['majcompflag'] == 'Yes'].empty:
                     selected_soil = selected_soil[selected_soil['majcompflag'] == 'Yes'].sort_values(by='top')
                 else:
+                    print(f'{index} {t} no major component')
                     selected_soil = selected_soil.sort_values(by='top')
                 selected_soil = selected_soil[selected_soil['hzname'] != 'R']
 
