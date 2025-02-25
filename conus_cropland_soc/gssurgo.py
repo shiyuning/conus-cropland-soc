@@ -11,12 +11,16 @@ GSSURGO_PARAMETERS = {
     'bottom': {'variable': 'hzdepb_r', 'multiplier': 0.01}, # m
 }
 GSSURGO_NON_SOIL_TYPES = [
-    'Water',
-    'Pits',
+    'Acidic rock land',
+    'Area not surveyed',
     'Dam',
     'Dumps',
     'Levee',
     'No Digital Data Available',
+    'Pits',
+    'Udorthents',
+    'Udorthents-Dumps complex',
+    'Water',
 ]
 NAD83 = 'epsg:5070'     # NAD83 / Conus Albers, CRS of gSSURGO
 
