@@ -61,7 +61,7 @@ def calculate_cropland_soc(lu_xds, area_gdf, boundary, county_id, state_id, laye
     df = reproject_match_soilgrids_maps(soilgrids_xds, lu_xds, 'lu', boundary, layers, ['bulk_density', 'soc'])
 
     # No cropland
-    if df[df.isin(AG_TYPES)].empty : return [0.0, 0.0] + list(np.nan * np.ones(len(variables) - 2))
+    if df[df['lu'].isin(AG_TYPES)].empty : return [0.0, 0.0] + list(np.nan * np.ones(len(variables) - 2))
 
     # Retrieve the areas of each LGRIP30 grid
     df = df[df['lu'].isin(AG_TYPES)].reset_index()
