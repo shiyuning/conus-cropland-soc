@@ -29,7 +29,7 @@ def read_soilgrids_maps(state_id, layers, parameters, crs=HOMOLOSINE):
     soilgrids_xds = {}
     for layer in layers:
         for v in parameters:
-            soilgrids_xds[v + layer] = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/{state_id}/{SOILGRIDS_PROPERTIES[v]["name"]}_{layer}.tif', masked=True).rio.reproject(crs)
+            soilgrids_xds[f'{v}_{layer}'] = rioxarray.open_rasterio(f'{SOILGRIDS_DIRECTORY}/{state_id}/{SOILGRIDS_PROPERTIES[v]["name"]}_{layer}.tif', masked=True).rio.reproject(crs)
 
     return soilgrids_xds
 
@@ -40,7 +40,7 @@ def reproject_match_soilgrids_maps(soilgrids_xds, reference_xds, reference_name,
 
     for v in parameters:
         for layer in layers:
-            soil_xds = soilgrids_xds[v + layer].rio.reproject_match(reference_xds, resampling=Resampling.nearest)
+            soil_xds = soilgrids_xds[f'{v}_{layer}'].rio.reproject_match(reference_xds, resampling=Resampling.nearest)
             soil_xds = soil_xds.rio.clip([boundary], from_disk=True)
 
             soil_df = pd.DataFrame(soil_xds[0].to_series().rename(f'{v}_{layer}')) * SOILGRIDS_PROPERTIES[v]['multiplier']
