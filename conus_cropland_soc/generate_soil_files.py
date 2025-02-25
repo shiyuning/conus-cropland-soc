@@ -17,7 +17,7 @@ from config import LU_MAP, LU_TYPES
 from soil import SOIL_LAYERS
 from soilgrids import SOILGRIDS_PROPERTIES, SOILGRIDS_LAYERS
 from soilgrids import read_soilgrids_maps, reproject_match_soilgrids_maps
-from gssurgo import GSSURGO, GSSURGO_NON_SOIL_TYPES
+from gssurgo import GSSURGO, GSSURGO_NON_SOIL_TYPES, GSSURGO_URBAN_TYPES
 from gssurgo import NAD83
 from gssurgo import read_state_gssurgo_luts
 from config import WGS84, AEAC
@@ -46,7 +46,7 @@ def main():
 
     os.makedirs('soil', exist_ok=True)
 
-    for state_id in ['USA.1_1', 'USA.3_1', 'USA.4_1', 'USA.5_1', 'USA.6_1']:
+    for state_id in conus_gdf['GID_1'].unique():
         state_abbreviation = STATE_ABBREVIATIONS[state_id]
 
         # Read state SoilGrids data
@@ -93,8 +93,9 @@ def main():
                 # Find the soil types of each cropland grid by joining the cropland GeoDataFrame with gSSURGO
                 # GeoDataFrame. Remove grids that are not categorized as soil
                 df = gpd.tools.sjoin(sub_df, soil, predicate='within', how='left')
-                df = df[~df['muname'].isin(GSSURGO_NON_SOIL_TYPES)]
                 df = df[df['mukey'].notna()]
+                df = df[~df['muname'].isin(GSSURGO_NON_SOIL_TYPES)]
+                df = df[~df['muname'].str.contains('|'.join(GSSURGO_URBAN_TYPES), na=False)]
 
                 if df.empty: continue
 
@@ -116,7 +117,10 @@ def main():
 
                 # Get soil parameters of the dominant soil type
                 selected_soil = selected_soil.to_frame().T.merge(gssurgo_luts['component'], on='mukey').merge(gssurgo_luts['chorizon'], on='cokey')
-                selected_soil = selected_soil[selected_soil['majcompflag'] == 'Yes'].sort_values(by='top')
+                if not selected_soil[selected_soil['majcompflag'] == 'Yes'].empty:
+                    selected_soil = selected_soil[selected_soil['majcompflag'] == 'Yes'].sort_values(by='top')
+                else:
+                    selected_soil = selected_soil.sort_values(by='top')
                 selected_soil = selected_soil[selected_soil['hzname'] != 'R']
 
                 # Calculate soil depth
@@ -128,7 +132,7 @@ def main():
                 generate_soil_file(fn, 'gSSURGO', county['NAME_2'], county['NAME_1'], t, hsg, slope, soil_depth, selected_soil)
 
                 # Use the dominant soil type and drop grids with missing SoilGrids data
-                df = df[df['muname'] == muname].dropna()
+                df = df[df['muname'] == muname].dropna(subset=[name for name in soilgrids_xds])
 
                 if df.empty: continue
 

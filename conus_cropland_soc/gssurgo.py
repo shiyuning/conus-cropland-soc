@@ -18,9 +18,11 @@ GSSURGO_NON_SOIL_TYPES = [
     'Levee',
     'No Digital Data Available',
     'Pits',
-    'Udorthents',
-    'Udorthents-Dumps complex',
     'Water',
+]
+GSSURGO_URBAN_TYPES = [
+    'Udorthents',
+    'Urban land complex',
 ]
 NAD83 = 'epsg:5070'     # NAD83 / Conus Albers, CRS of gSSURGO
 
