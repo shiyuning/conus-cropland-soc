@@ -22,7 +22,7 @@ GSSURGO_NON_SOIL_TYPES = [
 ]
 GSSURGO_URBAN_TYPES = [
     'Udorthents',
-    'Urban land complex',
+    'Urban land',
 ]
 NAD83 = 'epsg:5070'     # NAD83 / Conus Albers, CRS of gSSURGO
 
