@@ -51,11 +51,8 @@ def soc_weight(bulk_density, soc_percent, thickness_meter):
     return soc_percent * 0.01 * thickness_meter * bulk_density * 1.0E4
 
 
-def calculate_cropland_soc(lu_xds, area_gdf, boundary, county_id, state_id, layers, variables):
+def calculate_cropland_soc(lu_xds, area_gdf, soilgrids_xds, boundary, county_id, layers, variables):
     with open(f'./temp/{county_id}', 'w') as f: pass
-
-    # Read SoilGrids maps
-    soilgrids_xds = read_soilgrids_maps(state_id, layers, ['bulk_density', 'soc'], WGS84)
 
     # Align SoilGrids maps with cropland map
     df = reproject_match_soilgrids_maps(soilgrids_xds, lu_xds, 'lu', boundary, layers, ['bulk_density', 'soc'])
@@ -117,7 +114,6 @@ def main():
     # Calculate the areas of each LGRIP30 grid
     area_gdf = calculate_grid_areas(lu_xds.coords['y'], WGS84)
 
-
     # Find SoilGrids layers that are shallower than the total depth
     layers = [layer for layer in SOILGRIDS_LAYERS if SOILGRIDS_LAYERS[layer]['bottom'] <= TOTAL_DEPTH]
 
@@ -131,13 +127,29 @@ def main():
                 variables.append(f'soc_{t}_{v}_{layer}')
 
     # Calculate cropland areas and SOC weights
-    conus_gdf[variables] = conus_gdf.apply(
-        lambda x: calculate_cropland_soc(lu_xds, area_gdf, x['geometry'], x['GID'], x['GID_1'], layers, variables),
-        axis=1,
-        result_type='expand',
-    )
+    output_df = pd.DataFrame()
+    for i in range(52):
+        state_id = f'USA.{i}_1'
+        if state_id not in conus_gdf['GID_1'].unique(): continue
 
-    write_to_csv(conus_gdf, variables)
+        sub_gdf = conus_gdf[conus_gdf['GID_1'] == state_id].copy()
+
+        # Read SoilGrids maps
+        soilgrids_xds = read_soilgrids_maps(state_id, layers, ['bulk_density', 'soc'], WGS84)
+
+        sub_gdf[variables] = sub_gdf.apply(
+            lambda x: calculate_cropland_soc(lu_xds, area_gdf, soilgrids_xds, x['geometry'], x['GID'], layers, variables),
+            axis=1,
+            result_type='expand',
+        )
+
+        output_df = pd.concat(
+            [output_df, sub_gdf],
+            axis=0,
+        )
+
+    write_to_csv(output_df, variables)
+
 
 if __name__ == '__main__':
     main()
