@@ -7,12 +7,12 @@ import numpy as np
 import os
 import pandas as pd
 import rioxarray
-from cycles.gadm import read_gadm
-from cycles.soilgrids import read_soilgrids_maps, reproject_match_soilgrids_maps
 from shapely.geometry import Polygon
 from config import GADM_PATH, SOILGRIDS_PATH
 from config import AREA_SOC_CSV, MIN_REPORT_AREA
 from config import LU_MAP, LU_TYPES, AG_TYPES
+from cycles.gadm import read_gadm
+from cycles.soilgrids import read_soilgrids_maps, reproject_match_soilgrids_maps
 
 CONUS_CENTRAL_LON = -98.583 # central longitude of the CONUS (degree)
 DI = DJ = 0.00026949    # LGRI30 grid size (degree)
@@ -23,7 +23,7 @@ FUNCS = {
     'max': lambda x: x.max(),
     'min': lambda x: x.min(),
 }
-
+MAP = 'organic_carbon_stocks@0-30cm'
 
 def get_lgrip_grid(x, y):
     x0 = max(-180, x)
@@ -50,7 +50,7 @@ def calculate_cropland_soc(lu_xds, area_gdf, soilgrids_xds, boundary, county_id,
     with open(f'./temp/{county_id}', 'w') as f: pass
 
     # Align SoilGrids maps with cropland map
-    df = reproject_match_soilgrids_maps(soilgrids_xds, lu_xds, 'lu', boundary, ['0-30cm'], ['organic_carbon_stocks'])
+    df = reproject_match_soilgrids_maps(soilgrids_xds, lu_xds, 'lu', boundary)
 
     # No cropland
     if df[df['lu'].isin(AG_TYPES)].empty : return [0.0, 0.0] + list(np.nan * np.ones(len(variables) - 2))
@@ -70,7 +70,7 @@ def calculate_cropland_soc(lu_xds, area_gdf, soilgrids_xds, boundary, county_id,
             result.update({f'soc_{t}_{f}': np.nan for f in FUNCS})
             continue
 
-        result.update({f'soc_{t}_{f}': FUNCS[f](sub_df['organic_carbon_stocks_0-30cm']) for f in FUNCS})
+        result.update({f'soc_{t}_{f}': FUNCS[f](sub_df[MAP]) for f in FUNCS})
 
     return [result[v] for v in variables]
 
@@ -117,14 +117,13 @@ def main():
     # Calculate cropland areas and SOC weights
     output_df = pd.DataFrame()
 
-    for i in range(52):
-        state_id = f'USA.{i}_1'
+    for state_id in [f'USA.{s}_1' for s in range(52)]:
         if state_id not in conus_gdf['GID_1'].unique(): continue
 
         sub_gdf = conus_gdf[conus_gdf['GID_1'] == state_id].copy()
 
         # Read SoilGrids maps
-        soilgrids_xds = read_soilgrids_maps(SOILGRIDS_PATH, state_id, ['0-30cm'], ['organic_carbon_stocks'])
+        soilgrids_xds = read_soilgrids_maps(f'{SOILGRIDS_PATH}/{state_id}', [MAP])
 
         sub_gdf[variables] = sub_gdf.apply(
             lambda x: calculate_cropland_soc(lu_xds, area_gdf, soilgrids_xds, x['geometry'], x['GID'], variables),
